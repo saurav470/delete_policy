@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     app_name: str = "Healthcare Backend API"
     app_version: str = "1.0.0"
     debug: bool = False
-    host: str = os.getenv("API_HOST", "127.0.0.1")
+    host: str = os.getenv("API_HOST", "0.0.0.0")
     port: int = int(os.getenv("API_PORT", "8000"))
 
     # OpenAI Configuration

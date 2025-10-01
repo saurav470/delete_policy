@@ -97,7 +97,10 @@ class HealthcareDocumentIngestion:
         try:
             # Initialize Qdrant client
             print(self.qdrant_url)
-            self.qdrant_client = QdrantClient(url=self.qdrant_url)
+            if self.qdrant_url == ":memory:":
+                self.qdrant_client = QdrantClient(location=":memory:")
+            else:
+                self.qdrant_client = QdrantClient(url=self.qdrant_url)
             logger.info(f"Connected to Qdrant at {self.qdrant_url}")
 
             # Initialize OpenAI embeddings

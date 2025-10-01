@@ -13,15 +13,17 @@ Full-stack healthcare insurance application with React frontend, FastAPI backend
 
 ## Recent Changes
 - October 1, 2025: Complete application setup
-  - **Backend**: Reconfigured FastAPI to run on port 8000
+  - **Backend**: Reconfigured FastAPI to run on 0.0.0.0:8000
   - **Frontend**: Created premium React UI with Vite on port 5000
   - **UI Components**: Built ChatBot and VoiceAgent interfaces with gradient design
-  - **Integration**: Connected frontend to backend APIs
+  - **Integration**: Connected frontend to backend APIs via Vite proxy
   - **Styling**: Implemented dark theme with purple/blue gradients
-  - **Voice Agent**: Go WebRTC/SFU implementation on port 8080
+  - **Voice Agent**: Go WebRTC/SFU implementation on port 8080 with proxy setup
+  - **Qdrant Fix**: Fixed in-memory mode initialization (use `location` param instead of `url`)
   - Installed Python 3.12, Node.js 20, and Go 1.24
   - Set up Qdrant in-memory mode for vector database
   - Made Gemini API key optional (falls back gracefully)
+  - Configured Vite proxies for `/api` (backend) and `/voice` (voice agent)
   - Configured deployment settings for autoscale
 
 ## Architecture
@@ -83,7 +85,7 @@ Required API keys should be set as Replit Secrets:
 
 ### Default Configuration
 - **Frontend**: 0.0.0.0:5000 (React with Vite)
-- **Backend**: 127.0.0.1:8000 (FastAPI)
+- **Backend**: 0.0.0.0:8000 (FastAPI)
 - **Voice Agent**: 0.0.0.0:8080 (Go)
 - **Qdrant**: :memory: (in-memory mode)
 - **Collection**: healthcare_insurance
