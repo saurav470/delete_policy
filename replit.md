@@ -1,25 +1,28 @@
-# Healthcare Insurance Backend API
+# Healthcare Insurance Full-Stack Application
 
 ## Overview
-FastAPI backend service for healthcare insurance chatbot functionality with RAG (Retrieval Augmented Generation) capabilities using Qdrant vector database, OpenAI GPT models, and Gemini for session title generation.
+Full-stack healthcare insurance application with React frontend, FastAPI backend, and Go voice agent. Features premium UI for chatbot and voice interactions with RAG (Retrieval Augmented Generation) capabilities.
 
 ## Project Status
 - **Last Updated**: October 1, 2025
-- **Status**: Configured and running on Replit
-- **Port**: 5000
+- **Status**: Fully configured and running on Replit
+- **Frontend Port**: 5000 (React with Vite)
+- **Backend Port**: 8000 (FastAPI)
+- **Voice Agent Port**: 8080 (Go WebRTC)
 - **Environment**: Development
 
 ## Recent Changes
-- October 1, 2025: Initial Replit setup completed
-  - Installed Python 3.12 dependencies
-  - Configured FastAPI to run on port 5000
+- October 1, 2025: Complete application setup
+  - **Backend**: Reconfigured FastAPI to run on port 8000
+  - **Frontend**: Created premium React UI with Vite on port 5000
+  - **UI Components**: Built ChatBot and VoiceAgent interfaces with gradient design
+  - **Integration**: Connected frontend to backend APIs
+  - **Styling**: Implemented dark theme with purple/blue gradients
+  - **Voice Agent**: Go WebRTC/SFU implementation on port 8080
+  - Installed Python 3.12, Node.js 20, and Go 1.24
   - Set up Qdrant in-memory mode for vector database
   - Made Gemini API key optional (falls back gracefully)
   - Configured deployment settings for autoscale
-  - Workflow configured and running successfully
-  - Created custom WebRTC/SFU voice agent in Go
-  - Integrated ElevenLabs TTS and OpenAI STT/LLM
-  - Implemented ultra-low latency voice communication
 
 ## Architecture
 
@@ -79,8 +82,9 @@ Required API keys should be set as Replit Secrets:
 - `VOICE_AGENT_PORT`: Port for voice agent server (default: 8080)
 
 ### Default Configuration
-- **Host**: 0.0.0.0
-- **Port**: 5000
+- **Frontend**: 0.0.0.0:5000 (React with Vite)
+- **Backend**: 127.0.0.1:8000 (FastAPI)
+- **Voice Agent**: 0.0.0.0:8080 (Go)
 - **Qdrant**: :memory: (in-memory mode)
 - **Collection**: healthcare_insurance
 - **Chunk Size**: 1000
