@@ -1,4 +1,4 @@
-modules = ["python-3.12", "go-1.21", "bash"]
+modules = ["python-3.12", "go-1.21", "bash", "go-1.24"]
 [agent]
 expertMode = true
 
