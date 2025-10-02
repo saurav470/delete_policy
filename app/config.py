@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
     helicone_api_key: str = os.getenv("HELICONE_API_KEY", "")
     helicone_base_url: str = "https://oai.hconeai.com/v1"
-    
+
     # Gemini Configuration
     gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
 
@@ -52,10 +52,9 @@ class Settings(BaseSettings):
     max_context_length: int = 4000
 
     # Qdrant Configuration (use :memory: for in-memory mode if server not available)
-    qdrant_url: str = os.getenv("QDRANT_URL", ":memory:")
-    qdrant_collection_name: str = os.getenv(
-        "QDRANT_COLLECTION_NAME", "healthcare_insurance"
-    )
+    qdrant_url: str = "https://api-insurancecopilot.devkraft.in"
+    qdrant_collection_name: str = os.getenv("QDRANT_COLLECTION_NAME",
+                                            "healthcare_insurance")
 
     # Session Configuration
     session_timeout_hours: int = 24
