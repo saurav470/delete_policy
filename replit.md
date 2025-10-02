@@ -44,3 +44,11 @@ The application is designed for a multi-service architecture, deployed on Replit
 - **Qdrant**: Vector database (in-memory by default).
 - **Helicone**: For monitoring OpenAI GPT-4 interactions.
 - **Pion WebRTC**: Go library for WebRTC implementation in the voice agent.
+
+## Recent Changes (October 2, 2025)
+- **GitHub Import Setup**: Configured project to run in Replit environment
+- **Dependencies Installed**: Python 3.12 packages from requirements_new.txt, Node.js 20 packages from frontend/package.json, Go dependencies auto-installed
+- **Vite Configuration**: Updated port from 5001 to 5000, added `allowedHosts: true` for Replit proxy compatibility
+- **Workflows Configured**: Three separate workflows - Backend (port 8000), Frontend (port 5000), Voice Agent (port 8080)
+- **Git Ignore Updated**: Added comprehensive Node.js and Go ignore patterns
+- **All Services Running**: Frontend displaying correctly, backend API operational, voice agent ready on port 8080
