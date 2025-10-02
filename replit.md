@@ -4,14 +4,22 @@
 Full-stack healthcare insurance application with React frontend, FastAPI backend, and Go voice agent. Features premium UI for chatbot and voice interactions with RAG (Retrieval Augmented Generation) capabilities.
 
 ## Project Status
-- **Last Updated**: October 1, 2025
-- **Status**: Fully configured and running on Replit
+- **Last Updated**: October 2, 2025
+- **Status**: Fully configured and running on Replit (GitHub import completed)
 - **Frontend Port**: 5000 (React with Vite)
 - **Backend Port**: 8000 (FastAPI)
 - **Voice Agent Port**: 8080 (Go WebRTC)
 - **Environment**: Development
 
 ## Recent Changes
+- October 2, 2025: GitHub import setup and configuration
+  - Installed all dependencies (npm, pip, go modules)
+  - Fixed frontend Vite config to use port 5000 with HMR support
+  - Configured all three workflows (Frontend, Backend, VoiceAgent)
+  - Set up VM deployment with multi-service startup script
+  - Verified all services running successfully
+  - All components now fully functional in Replit environment
+
 - October 1, 2025: Complete application setup
   - **Backend**: Reconfigured FastAPI to run on 0.0.0.0:8000
   - **Frontend**: Created premium React UI with Vite on port 5000
@@ -24,7 +32,6 @@ Full-stack healthcare insurance application with React frontend, FastAPI backend
   - Set up Qdrant in-memory mode for vector database
   - Made Gemini API key optional (falls back gracefully)
   - Configured Vite proxies for `/api` (backend) and `/voice` (voice agent)
-  - Configured deployment settings for autoscale
 
 ## Architecture
 
@@ -134,10 +141,11 @@ bash run_ingestion.sh
 - API docs: Not available in production mode (debug=False)
 
 ## Deployment
-Configured for Replit Autoscale deployment:
-- **Type**: autoscale (stateless, on-demand scaling)
-- **Command**: `uvicorn app.main:app --host 0.0.0.0 --port 5000`
-- **Port**: 5000
+Configured for Replit VM deployment:
+- **Type**: vm (stateful, always-on for multi-service architecture)
+- **Command**: `bash start_all_services.sh`
+- **Services**: Frontend (5000), Backend (8000), Voice Agent (8080)
+- **Entry Port**: 5000 (Frontend with proxying to other services)
 
 ## Code Style
 - **Naming**: snake_case for variables/functions, PascalCase for classes
