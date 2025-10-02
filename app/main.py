@@ -13,7 +13,7 @@ from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.config import settings
-from app.api import chat_history, health, insurance
+from app.api import chat_history, health, insurance, tts
 
 # Configure logging
 logging.basicConfig(
@@ -131,6 +131,7 @@ def setup_routers(app: FastAPI) -> None:
     app.include_router(health.router)
     app.include_router(chat_history.router)
     app.include_router(insurance.router)
+    app.include_router(tts.router)
 
     # Root endpoint
     @app.get("/")

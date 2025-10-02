@@ -13,12 +13,41 @@
   background: linear-gradient(135deg, var(--primary), var(--secondary));
   padding: 1.5rem;
   color: white;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .header-content {
   display: flex;
   align-items: center;
   gap: 1rem;
+}
+
+.audio-toggle {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  padding: 0.75rem;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.audio-toggle:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(1.1);
+}
+
+.audio-toggle.active {
+  background: rgba(16, 185, 129, 0.3);
+}
+
+.audio-toggle:not(.active) {
+  opacity: 0.5;
 }
 
 .header-icon {

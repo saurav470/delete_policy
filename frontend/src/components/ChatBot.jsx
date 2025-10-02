@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Send, Loader2, Bot, User, Sparkles } from 'lucide-react';
+import { Send, Loader2, Bot, User, Sparkles, Volume2 } from 'lucide-react';
 import { createSession, sendMessage, getSession } from '../utils/api';
 import './ChatBot.css';
 
@@ -9,7 +9,9 @@ function ChatBot() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
+  const [audioEnabled, setAudioEnabled] = useState(true);
   const messagesEndRef = useRef(null);
+  const audioRef = useRef(null);
 
   useEffect(() => {
     initializeSession();
@@ -23,16 +25,54 @@ function ChatBot() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  const playTTS = async (text) => {
+    if (!audioEnabled || !text) return;
+    
+    try {
+      const response = await fetch('/api/v1/tts/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ text }),
+      });
+
+      if (!response.ok) {
+        console.error('TTS generation failed');
+        return;
+      }
+
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+      
+      if (audioRef.current) {
+        audioRef.current.src = audioUrl;
+        try {
+          await audioRef.current.play();
+        } catch (playError) {
+          // Autoplay may be blocked - silently fail
+          console.log('Audio autoplay blocked - user interaction required');
+        }
+        audioRef.current.onended = () => URL.revokeObjectURL(audioUrl);
+      }
+    } catch (error) {
+      console.error('TTS playback error:', error);
+    }
+  };
+
   const initializeSession = async () => {
     try {
       const session = await createSession();
       setSessionId(session.session_id);
+      const greetingMessage = 'Hello! 👋 I\'m your healthcare insurance assistant. Please share your registered mobile number, and I\'ll help you with your policy questions.';
       setMessages([
         {
           role: 'assistant',
-          content: 'Hello! 👋 I\'m your healthcare insurance assistant. Please share your registered mobile number, and I\'ll help you with your policy questions.',
+          content: greetingMessage,
         },
       ]);
+      // Note: Greeting audio will NOT autoplay due to browser restrictions
+      // Audio will start playing after the user's first interaction (sending a message)
     } catch (error) {
       console.error('Failed to initialize session:', error);
       setMessages([
@@ -57,10 +97,13 @@ function ChatBot() {
 
     try {
       const response = await sendMessage(sessionId, userMessage);
+      const assistantMessage = response.answer || response.message;
       setMessages((prev) => [
         ...prev,
-        { role: 'assistant', content: response.answer || response.message },
+        { role: 'assistant', content: assistantMessage },
       ]);
+      // Play TTS for assistant response
+      playTTS(assistantMessage);
     } catch (error) {
       console.error('Failed to send message:', error);
       setMessages((prev) => [
@@ -101,6 +144,13 @@ function ChatBot() {
             </p>
           </div>
         </div>
+        <button
+          onClick={() => setAudioEnabled(!audioEnabled)}
+          className={`audio-toggle ${audioEnabled ? 'active' : ''}`}
+          title={audioEnabled ? 'Disable Voice' : 'Enable Voice'}
+        >
+          <Volume2 size={20} />
+        </button>
       </div>
 
       <div className="messages-container">
@@ -158,6 +208,9 @@ function ChatBot() {
           Powered by AI • Your data is secure
         </p>
       </form>
+      
+      {/* Hidden audio element for TTS playback */}
+      <audio ref={audioRef} style={{ display: 'none' }} />
     </div>
   );
 }

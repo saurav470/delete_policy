@@ -11,6 +11,7 @@ function VoiceAgent() {
   const [transcript, setTranscript] = useState([]);
   const [error, setError] = useState('');
   const audioRef = useRef(null);
+  const ttsAudioRef = useRef(null);
   const peerConnectionRef = useRef(null);
   const localStreamRef = useRef(null);
   const sessionRef = useRef({ room_id: null, session_id: null });
@@ -18,6 +19,41 @@ function VoiceAgent() {
   const pendingIceRef = useRef([]);
   const recognitionRef = useRef(null);
   const backendSessionRef = useRef(null);
+
+  const playTTS = async (text) => {
+    if (!text) return;
+    
+    try {
+      const response = await fetch('/api/v1/tts/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ text }),
+      });
+
+      if (!response.ok) {
+        console.error('TTS generation failed');
+        return;
+      }
+
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+      
+      if (ttsAudioRef.current) {
+        ttsAudioRef.current.src = audioUrl;
+        try {
+          await ttsAudioRef.current.play();
+        } catch (playError) {
+          // Autoplay may be blocked - silently fail
+          console.log('Audio autoplay blocked - user interaction required');
+        }
+        ttsAudioRef.current.onended = () => URL.revokeObjectURL(audioUrl);
+      }
+    } catch (error) {
+      console.error('TTS playback error:', error);
+    }
+  };
 
   const startCall = async () => {
     if (!phoneNumber.trim()) {
@@ -180,6 +216,9 @@ function VoiceAgent() {
 
       setTranscript(baseTranscript);
 
+      // Play greeting audio after user initiated the call (user gesture present)
+      playTTS('Hello! I\'m your insurance assistant. How can I help you today?');
+
       setIsConnected(true);
       setIsConnecting(false);
     } catch (err) {
@@ -281,8 +320,8 @@ function VoiceAgent() {
                     const sentences = aggregated.split(/(?<=[.!?])\s+/);
                     if (sentences.length > 0 && /[.!?]$/.test(sentences[0])) {
                       const early = formatForVoice(sentences[0]);
-                      if (window.speechSynthesis && early) {
-                        try { window.speechSynthesis.speak(new SpeechSynthesisUtterance(early)); } catch (_) { }
+                      if (early) {
+                        try { playTTS(early); } catch (_) { }
                       }
                       firstSentenceSpoken = true;
                     }
@@ -299,22 +338,10 @@ function VoiceAgent() {
                 const answer = formatForVoice(answerRaw);
                 const agentEntry = { speaker: 'agent', text: answer, timestamp: new Date().toISOString() };
                 setTranscript((prev) => [...prev, agentEntry]);
-                if (window.speechSynthesis && answer) {
-                  const utter = new SpeechSynthesisUtterance(answer);
-                  utter.rate = 1.0;
-                  utter.pitch = 1.0;
-                  window.speechSynthesis.speak(utter);
+                if (answer) {
+                  playTTS(answer);
                 }
               }
-              const agentEntry = {
-                speaker: 'agent',
-                text: answer,
-                timestamp: new Date().toISOString(),
-              };
-              setTranscript((prev) => [...prev, agentEntry]);
-
-              // Optional TTS of the assistant reply
-              // TTS handled above for streaming; no-op here
             } catch (e) {
               // ignore chat failures, keep STT running
             }
@@ -481,6 +508,9 @@ function VoiceAgent() {
 
             {/* Hidden audio element to play remote media */}
             <audio ref={audioRef} autoPlay playsInline />
+            
+            {/* Hidden audio element for TTS playback */}
+            <audio ref={ttsAudioRef} style={{ display: 'none' }} />
           </div>
         )}
       </div>
