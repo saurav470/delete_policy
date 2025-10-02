@@ -82,6 +82,6 @@ localPort = 41203
 externalPort = 3001
 
 [deployment]
-deploymentTarget = "autoscale"
-run = ["bash", "-c", "npm install -g serve && serve -s frontend/dist -l 5000"]
+deploymentTarget = "vm"
+run = ["bash", "start_all_services.sh"]
 build = ["bash", "-c", "cd frontend && npm install && npm run build"]
