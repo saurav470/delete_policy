@@ -28,10 +28,11 @@ The frontend features a premium React UI built with Vite, designed with a dark t
 - **Configuration**: Centralized environment variable management using Replit Secrets for API keys and service configurations.
 
 ### Feature Specifications
-- **Insurance Chatbot**: Core functionality for answering policy questions using RAG.
+- **Insurance Chatbot**: Core functionality for answering policy questions using RAG. Features ElevenLabs TTS integration with audio toggle control for premium voice responses.
 - **Chat History**: Manages chat sessions, allowing users to list, create, and retrieve session details.
-- **Voice Interaction**: Enables voice calls with the insurance assistant, including WebRTC peer connection, STT (Web Speech API), and TTS (window.speechSynthesis for user-side, ElevenLabs for agent-side).
+- **Voice Interaction**: Enables voice calls with the insurance assistant, including WebRTC peer connection, STT (Web Speech API), and TTS exclusively via ElevenLabs API (no browser-based TTS).
 - **Voice Optimized Streaming**: Implements a voice-optimized streaming endpoint for low-latency responses, with prompt engineering limiting responses to two sentences (max 280 characters).
+- **ElevenLabs TTS Integration**: Dedicated backend endpoint (/api/v1/tts/generate) for generating high-quality voice audio. Audio playback respects browser autoplay policies with graceful error handling.
 
 ### System Design Choices
 The application is designed for a multi-service architecture, deployed on Replit VM. The frontend acts as the entry point (port 5000) and proxies requests to the backend and voice agent. The system prioritizes low-latency voice interactions and leverages in-memory Qdrant for rapid development. Code style guidelines emphasize snake_case, PascalCase, type hints, docstrings, and centralized error handling.
@@ -47,8 +48,15 @@ The application is designed for a multi-service architecture, deployed on Replit
 
 ## Recent Changes (October 2, 2025)
 - **GitHub Import Setup**: Configured project to run in Replit environment
-- **Dependencies Installed**: Python 3.12 packages from requirements_new.txt, Node.js 20 packages from frontend/package.json, Go dependencies auto-installed
+- **Dependencies Installed**: Python 3.12 packages from requirements_new.txt, Node.js 20 packages from frontend/package.json, Go dependencies auto-installed, elevenlabs Python library
 - **Vite Configuration**: Updated port from 5001 to 5000, added `allowedHosts: true` for Replit proxy compatibility
 - **Workflows Configured**: Three separate workflows - Backend (port 8000), Frontend (port 5000), Voice Agent (port 8080)
 - **Git Ignore Updated**: Added comprehensive Node.js and Go ignore patterns
 - **All Services Running**: Frontend displaying correctly, backend API operational, voice agent ready on port 8080
+- **ElevenLabs TTS Integration**: 
+  - Created backend TTS endpoint (app/api/tts.py) using ElevenLabs API with eleven_flash_v2_5 model
+  - Integrated audio playback in ChatBot component with volume toggle button (purple speaker icon)
+  - Replaced all window.speechSynthesis usage with ElevenLabs API calls
+  - Added browser autoplay policy compliance with graceful error handling
+  - VoiceAgent greeting now plays after user gesture (Start Call button)
+  - ChatBot audio playback gated behind user interaction to respect browser policies
