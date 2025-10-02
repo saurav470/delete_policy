@@ -669,6 +669,87 @@ class InsuranceService:
             logger.error(f"Error generating AI response: {str(e)}")
             return "I apologize, but I'm having trouble processing your request right now. Please try again later or contact our customer service."
 
+    async def generate_voice_response_stream(
+        self, prompt: str, policy_data: Optional[PolicyInfo], mobile_number: str
+    ):
+        """
+        Generate voice-optimized AI response using OpenAI streaming.
+        Based on LiveKit/Vapi voice agent best practices:
+        - Keep responses under 2 sentences (max 280 chars)
+        - Be conversational and crisp
+        - No HTML formatting
+        - Natural speech patterns
+        
+        Args:
+            prompt (str): User's voice prompt
+            policy_data (Optional[PolicyInfo]): Policy information if found
+            mobile_number (str): Mobile number
+        
+        Yields:
+            str: Streaming response chunks
+        """
+        try:
+            # Analyze if RAG is needed (lighter version for voice)
+            context_analysis = await self.analyze_context_for_rag(prompt, policy_data)
+            
+            # Build concise context
+            policy_context = ""
+            if policy_data:
+                policy_context = f"""Policy {policy_data.policy_number}, Sum Insured: {policy_data.sum_insured}, 
+Premium: {policy_data.premium.get('amount', 'N/A')}"""
+            else:
+                policy_context = "No policy found for this mobile number."
+            
+            # Voice-optimized system prompt based on research
+            voice_system_prompt = """You are a helpful insurance assistant in a voice call.
+
+## Style Guardrails
+- Keep ALL responses under 2 sentences (max 280 characters)
+- Be warm, empathetic, and conversational
+- Use natural speech - no bullet points, no HTML, no formatting
+- Speak directly and clearly
+- If the answer is complex, give the most important point first
+
+## Goal
+Answer policy questions quickly and accurately. If details are lengthy, summarize and offer to explain more.
+
+## Example Responses
+User: "What's my coverage?"
+You: "Your policy covers up to 5 lakh rupees for hospitalization. Would you like details on specific benefits?"
+
+User: "How do I file a claim?"
+You: "Call customer care at the number on your policy card, or visit the website to file online. Need the contact number?"
+"""
+            
+            # Concise user prompt
+            voice_prompt = f"""
+User question: {prompt}
+
+Policy Context: {policy_context}
+
+Provide a crisp, concise answer in under 2 sentences. Be conversational and helpful.
+"""
+            
+            # Stream the response
+            stream = await self.openai_client.chat.completions.create(
+                model=GPT_4_1_MINI,  # Faster model for low latency
+                messages=[
+                    {"role": "system", "content": voice_system_prompt},
+                    {"role": "user", "content": voice_prompt},
+                ],
+                temperature=0.3,
+                max_tokens=150,  # Limit for concise responses
+                stream=True,
+            )
+            
+            async for chunk in stream:
+                if chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
+                    
+        except Exception as e:
+            logger.error(f"Error in voice response stream: {str(e)}")
+            yield "I'm having trouble with that. Could you ask again?"
+
     def _build_context(
         self, policy_data: Optional[PolicyInfo], mobile_number: str
     ) -> str:

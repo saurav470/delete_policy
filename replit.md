@@ -169,10 +169,10 @@ See `requirements_new.txt` for full list. Key packages:
 - openai==1.107.2
 - SQLAlchemy==2.0.43
 
-## Voice Agent Architecture
+## Voice Agent Architecture (Updated Oct 2, 2025)
 
-### WebRTC/SFU Custom Implementation
-Built from scratch using Pion WebRTC (Go), similar to LiveKit architecture:
+### Current Implementation
+Built using Pion WebRTC (Go) with custom SFU, inspired by LiveKit architecture:
 
 **Components:**
 - **SFU (Selective Forwarding Unit)**: Custom media forwarding logic
@@ -181,25 +181,198 @@ Built from scratch using Pion WebRTC (Go), similar to LiveKit architecture:
 - **Room Management**: Multi-participant room handling
 - **Data Channels**: Transcript and metadata synchronization
 
-**Voice Pipeline:**
-1. Phone number collection (similar to /chat endpoint)
+**Current Voice Pipeline:**
+1. Phone number collection via `/voice/start` endpoint
 2. WebRTC peer connection establishment
-3. Real-time audio streaming via SFU
-4. STT: OpenAI Whisper for speech-to-text
-5. LLM: OpenAI GPT-4 for conversation
-6. TTS: ElevenLabs Flash v2.5 for ultra-low latency speech
+3. Browser-based STT (Web Speech API) for user input
+4. Backend streaming endpoint (`/api/v1/insurance/chat/voice-stream`) for LLM responses
+5. Browser-based TTS (window.speechSynthesis) for agent output
+6. Go backend has ElevenLabs TTS integration (partial - not fully connected to WebRTC audio tracks)
 
-**Features:**
-- Ultra-low latency (<100ms)
-- Automatic ICE candidate gathering
-- Multi-track support (audio/video/data)
-- Session management and cleanup
-- Transcript generation in real-time
+**Implemented Improvements (Oct 2, 2025):**
+- ✅ Voice-optimized streaming endpoint for ultra-low latency responses
+- ✅ Improved prompt engineering based on LiveKit/Vapi best practices:
+  - Responses limited to 2 sentences (max 280 chars)
+  - Conversational, crisp, and concise
+  - Natural speech patterns
+  - Clear instructions for tool usage
+- ✅ GPT-4-mini for faster streaming responses
+- ✅ Optimized system prompts in both Python backend and Go voice agent
 
 ### Running Voice Agent
 ```bash
 cd voice-agent
 go run main.go
+```
+
+## Research Findings & Future Roadmap
+
+### LiveKit Architecture Insights (Research Oct 2025)
+
+**Key Learnings:**
+1. **5-Layer Stack** for sub-500ms latency:
+   - STT Layer: Deepgram Nova-3 (fastest), AssemblyAI
+   - LLM Layer: OpenAI GPT-4o-mini, Anthropic Claude
+   - TTS Layer: Cartesia (ultra-low latency), ElevenLabs, OpenAI TTS
+   - Media Transport: WebRTC over UDP with NACK/FEC error correction
+   - Orchestration: Agent framework for pipeline management
+
+2. **Ultra-Low Latency Techniques:**
+   - Deploy services in same VPC/region (single-digit ms internal latency)
+   - Parallel SLM + LLM execution (SLM for fast initial reply, LLM for quality)
+   - Streaming STT/TTS (start playback before complete response)
+   - Preemptive generation (start generating response before user finishes)
+   - Turn detection using transformer models (reduces interruptions by 30%)
+
+3. **Production Metrics:**
+   - End-to-end latency: 200-500ms (achievable)
+   - Cost per minute: ~$0.03 (Deepgram + OpenAI + Cartesia)
+   - Target TTFB: Sub-236ms for natural conversation flow
+
+### WHIP/WHEP Protocols (WebRTC Streaming)
+
+**What are WHIP/WHEP?**
+- **WHIP** (WebRTC-HTTP Ingestion Protocol): Client → Server streaming (publishing)
+- **WHEP** (WebRTC-HTTP Egress Protocol): Server → Client streaming (playback)
+- **Key Benefit**: HTTP-based signaling replaces complex WebSocket servers
+- **Latency**: Sub-second (200-500ms) vs. HLS/DASH (3-30s)
+
+**Advantages for Our Use Case:**
+- ✅ Standardized HTTP signaling (simpler than custom WebSocket)
+- ✅ Stateless (easier scaling)
+- ✅ Firewall-friendly
+- ✅ Built-in E2E encryption (DTLS/SRTP)
+- ✅ Dynamic codec support (H.264, VP8/9, AV1)
+
+**Implementation Options:**
+1. **Hosted Services:**
+   - Cloudflare Stream (WHIP/WHEP endpoints)
+   - Dolby.io/Millicast
+   - Metered.ca
+
+2. **Self-Hosted:**
+   - Janus Gateway (C) - VideoRoom + Streaming plugins
+   - Nimble Streamer
+   - Pion WebRTC (Go) - has WHIP/WHEP examples
+
+**Future Integration Plan:**
+```
+Phase 1: Replace custom WebSocket signaling with WHIP/WHEP
+Phase 2: Use Cloudflare Stream for production scaling
+Phase 3: Self-host with Janus Gateway for cost optimization
+```
+
+### Mem0 (Self-Hosted Memory Layer)
+
+**What is Mem0?**
+- Intelligent memory layer for AI agents enabling persistent, contextual memory
+- Official integration with OpenAI Agents SDK for voice applications
+- Self-hostable with Docker + Qdrant for full data control
+
+**Architecture:**
+```
+┌─────────────────────────────────────────┐
+│  Voice Agent (Go/Python)                │
+│  └─ Mem0 Client                         │
+└─────────────────────────────────────────┘
+           ↓
+┌─────────────────────────────────────────┐
+│  Mem0 API Server (Docker)               │
+│  ├─ FastAPI backend                     │
+│  ├─ PostgreSQL (metadata)               │
+│  └─ Qdrant (vector search)              │
+└─────────────────────────────────────────┘
+```
+
+**Docker Setup (Planned):**
+```yaml
+services:
+  mem0-qdrant:
+    image: qdrant/qdrant:latest
+    volumes:
+      - qdrant_data:/qdrant/storage
+    ports:
+      - "6333:6333"
+
+  mem0-api:
+    image: mem0/mem0:latest
+    env_file: .env
+    ports:
+      - "8765:8765"
+    depends_on:
+      - mem0-qdrant
+```
+
+**Voice Agent Memory Operations:**
+```python
+from mem0 import Memory
+
+# Initialize with self-hosted Qdrant
+config = {
+    "vector_store": {
+        "provider": "qdrant",
+        "config": {"host": "localhost", "port": 6333}
+    }
+}
+memory = Memory.from_config(config)
+
+# Add conversation memory
+memory.add(
+    messages=[{"role": "user", "content": "I prefer aisle seats"}],
+    user_id="user_123"
+)
+
+# Search memories (semantic)
+results = memory.search(query="seating preferences", user_id="user_123")
+
+# Build context for voice agent
+context = "\n".join([m['memory'] for m in results])
+```
+
+**Benefits for Voice Agent:**
+- ✅ Remember user preferences across calls
+- ✅ Maintain conversation context over sessions
+- ✅ Personalized policy recommendations
+- ✅ Full data ownership (self-hosted)
+
+**Implementation Timeline:**
+```
+Phase 1: Local Mem0 setup with Docker
+Phase 2: Integrate memory retrieval in voice pipeline
+Phase 3: Add memory updates after each call
+Phase 4: Implement forgetting strategy (expire old memories)
+```
+
+### Prompt Engineering Best Practices (Implemented)
+
+**Research Sources:**
+- LiveKit Agents documentation
+- Vapi.ai prompting guide
+- Retell AI best practices
+- ElevenLabs conversational AI guide
+
+**Key Principles (Now Applied):**
+1. **Response Length**: Under 2 sentences (max 280 chars) for voice
+2. **Structure**: 6-section prompts (Identity, Environment, Tone, Goal, Guardrails, Tools)
+3. **Natural Speech**: Use fillers ("uh," "well"), pauses (ellipses)
+4. **Clarity**: Precise, unambiguous language - no generalities
+5. **Tool Instructions**: Specify exact conditions for function calls
+
+**Our Implementation:**
+```python
+# Voice-optimized system prompt (app/services/insurance_service.py)
+voice_system_prompt = """You are a helpful insurance assistant in a voice call.
+
+## Style Guardrails
+- Keep ALL responses under 2 sentences (max 280 characters)
+- Be warm, empathetic, and conversational
+- Use natural speech - no bullet points, no HTML, no formatting
+- Speak directly and clearly
+- If the answer is complex, give the most important point first
+
+## Goal
+Answer policy questions quickly and accurately.
+"""
 ```
 
 ## Notes

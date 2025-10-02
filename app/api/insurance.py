@@ -117,6 +117,63 @@ session_service = SessionService()
 
 
 from uuid import uuid4
+from fastapi.responses import StreamingResponse
+
+
+@router.post("/chat/voice-stream")
+async def insurance_voice_stream(request: InsurancePromptRequest):
+    """
+    Streaming endpoint optimized for voice AI agents.
+    Returns concise, crisp responses suitable for voice TTS (<280 chars, max 2 sentences).
+    Based on LiveKit voice agent best practices for ultra-low latency.
+    """
+    try:
+        logger.info(f"Voice stream request: {request.prompt[:100]}...")
+        
+        # Validate session
+        if not session_service.is_session_valid(request.session_id):
+            async def error_stream():
+                yield "I'm sorry, your session has expired. Please start a new call."
+            return StreamingResponse(error_stream(), media_type="text/plain")
+        
+        current_state_session = session_service.get_session(request.session_id)
+        mobile_number = current_state_session.session_base_identifier
+        
+        # Check if mobile number exists
+        if not mobile_number:
+            mobile_extraction = await insurance_service.extract_mobile_number(request.prompt)
+            mobile_number = mobile_extraction.mobile_number
+            
+            if not mobile_number:
+                async def no_mobile_stream():
+                    yield "Please provide your registered mobile number to continue."
+                return StreamingResponse(no_mobile_stream(), media_type="text/plain")
+            
+            # Update session with mobile number
+            session_service.update_session_base_identifier(request.session_id, mobile_number)
+            # DO NOT RETURN - continue processing the original prompt with policy data
+        
+        # Find policy (whether mobile was just extracted or already existed)
+        policy_data = insurance_service.find_policy_by_mobile(mobile_number)
+        
+        # Generate voice-optimized response (streaming)
+        async def response_stream():
+            try:
+                async for chunk in insurance_service.generate_voice_response_stream(
+                    request.prompt, policy_data, mobile_number
+                ):
+                    yield chunk
+            except Exception as e:
+                logger.error(f"Error in voice stream: {e}")
+                yield "I'm having trouble processing that. Can you try asking again?"
+        
+        return StreamingResponse(response_stream(), media_type="text/plain")
+        
+    except Exception as e:
+        logger.error(f"Voice stream error: {str(e)}", exc_info=True)
+        async def error_stream():
+            yield "I encountered an error. Please try again."
+        return StreamingResponse(error_stream(), media_type="text/plain")
 
 
 @router.post("/chat", response_model=ChatEntry)

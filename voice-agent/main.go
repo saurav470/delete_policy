@@ -1,23 +1,23 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
-	"fmt"
-	"io"
-	"log"
-	"net/http"
-	"sync"
-	"voice-agent/config"
-	"voice-agent/models"
-	"voice-agent/room"
-	"voice-agent/sfu"
-	"voice-agent/signaling"
-	"voice-agent/stt"
-	"voice-agent/tts"
+        "bytes"
+        "encoding/json"
+        "fmt"
+        "io"
+        "log"
+        "net/http"
+        "sync"
+        "voice-agent/config"
+        "voice-agent/models"
+        "voice-agent/room"
+        "voice-agent/sfu"
+        "voice-agent/signaling"
+        "voice-agent/stt"
+        "voice-agent/tts"
 
-	"github.com/google/uuid"
-	"github.com/pion/webrtc/v4"
+        "github.com/google/uuid"
+        "github.com/pion/webrtc/v4"
 )
 
 type Server struct {
@@ -323,17 +323,36 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 func (s *Server) runVoiceAgent(room *models.Room, agent *models.Participant, user *models.Participant) {
         log.Printf("Voice agent started for room %s", room.ID)
 
-        systemPrompt := `You are a helpful insurance policy assistant. 
-        You help users understand their healthcare insurance policies.
-        Keep responses concise and clear. Ask clarifying questions when needed.
-        Always be professional and empathetic.`
+        // Voice-optimized system prompt based on LiveKit/Vapi best practices
+        systemPrompt := `You are a helpful insurance assistant in a voice call.
+
+## Style Guardrails
+- Keep responses under 2 sentences (max 280 characters)
+- Be warm, empathetic, and conversational
+- Use natural speech - be direct and clear
+- If the answer is complex, give the most important point first, then ask if they want more details
+
+## Goal
+Answer insurance policy questions quickly and accurately.
+
+## Tool Usage
+- For policy questions: retrieve policy info first, then answer
+- For claims: provide direct contact info or next steps
+
+## Example Responses
+User: "What's covered in my policy?"
+You: "Your policy covers hospitalization up to your sum insured, plus 60 days pre and post hospitalization. Want details on specific benefits?"
+
+User: "How do I make a claim?"
+You: "Call customer care or file online through the portal. Need the customer care number?"
+`
 
         conversationHistory := []stt.Message{}
         
         _ = systemPrompt
         _ = conversationHistory
 
-        greetingText := fmt.Sprintf("Hello! I'm your insurance assistant. I see you're calling from %s. How can I help you with your insurance policy today?", 
+        greetingText := fmt.Sprintf("Hi! I'm your insurance assistant calling about %s. How can I help with your policy today?", 
                 user.PhoneNumber)
 
         if agent.DataChannel != nil {
