@@ -53,8 +53,7 @@ class Settings(BaseSettings):
 
     # Qdrant Configuration (use :memory: for in-memory mode if server not available)
     qdrant_url: str = "https://api-insurancecopilot.devkraft.in"
-    qdrant_collection_name: str = os.getenv("QDRANT_COLLECTION_NAME",
-                                            "healthcare_insurance")
+    qdrant_collection_name: str = "healthcare_insurance"
 
     # Session Configuration
     session_timeout_hours: int = 24
