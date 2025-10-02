@@ -1,7 +1,3 @@
 package main
 
-import "fmt"
-
-func main() {
-    fmt.Println("Go is working!")
-}
+// dummy file to avoid extra main conflicts; intentionally empty

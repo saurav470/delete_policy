@@ -25,6 +25,13 @@ export const sendMessage = async (sessionId, message) => {
   return response.data;
 };
 
+export const setSessionBaseIdentifier = async (sessionId, baseIdentifier) => {
+  const response = await api.put(`/sessions/${sessionId}/base-identifier`, {
+    base_identifier: baseIdentifier,
+  });
+  return response.data;
+};
+
 export const healthCheck = async () => {
   const response = await api.get('/health');
   return response.data;

@@ -37,7 +37,6 @@ logger = logging.getLogger(__name__)
 session_service = SessionService()
 
 
-
 class InsuranceService:
     """Service for insurance chatbot operations."""
 
@@ -237,7 +236,7 @@ class InsuranceService:
                 - UIN: {policy_data.policy_summary.get('uin', 'N/A')}
                 - Coverage Type: {policy_data.people.get('type', 'N/A')}
                 """
-                
+
             translation_prompt = f"""
             <task>
             Translate the user's insurance query into multiple optimized queries for RAG search. 
@@ -462,7 +461,7 @@ class InsuranceService:
 
             if not mobile_number or mobile_number.lower() == "null":
                 mobile_number = None
-                
+
             # if moblie number search in purchase policies data
             if mobile_number:
                 policy_data = self.find_policy_by_mobile(mobile_number)
@@ -479,11 +478,11 @@ class InsuranceService:
                 mobile_number=mobile_number,
                 found=bool(mobile_number),
                 message=(
-                        "I couldn't find a mobile number in your message. "
-                        "Please provide your mobile number so I can help you with your insurance policy information."
-                        if not mobile_number and not message
-                        else message
-                    )
+                    "I couldn't find a mobile number in your message. "
+                    "Please provide your mobile number so I can help you with your insurance policy information."
+                    if not mobile_number and not message
+                    else message
+                ),
             )
 
         except Exception as e:
@@ -511,7 +510,7 @@ class InsuranceService:
                 policy_holder = policy_data.get("people", {}).get("policy_holder", {})
                 contact = policy_holder.get("contact", {})
                 policy_mobile = contact.get("mobile", "")
-                print("===policy mobile===", len(policy_mobile) , policy_mobile)
+                print("===policy mobile===", len(policy_mobile), policy_mobile)
                 # Extract last 4 digits for comparison (since numbers are masked)
                 if policy_mobile and mobile_number:
                     policy_last_4 = (
@@ -661,9 +660,7 @@ class InsuranceService:
             )
 
             print("===AI Response===", response.choices[0].message.content.strip())
-            res = extract_pattern(
-                response.choices[0].message.content.strip(), "Html"
-            )
+            res = extract_pattern(response.choices[0].message.content.strip(), "Html")
             if res:
                 return res.strip()
             return response.choices[0].message.content.strip()

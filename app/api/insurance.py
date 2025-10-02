@@ -162,14 +162,16 @@ async def insurance_chatbot(request: InsurancePromptRequest):
                 session_service.update_session(
                     request.session_id, data=[*current_state_session.data, chat_entry]
                 )
-                
+
                 # Generate title if needed
                 try:
                     if session_service.should_generate_title(request.session_id):
                         await session_service.generate_and_set_title(request.session_id)
                 except Exception as e:
-                    logger.warning(f"Failed to generate title for session {request.session_id}: {str(e)}")
-                
+                    logger.warning(
+                        f"Failed to generate title for session {request.session_id}: {str(e)}"
+                    )
+
                 return chat_entry
 
             # Mobile number found → update session base identifier
@@ -197,7 +199,9 @@ async def insurance_chatbot(request: InsurancePromptRequest):
                 if session_service.should_generate_title(request.session_id):
                     await session_service.generate_and_set_title(request.session_id)
             except Exception as e:
-                logger.warning(f"Failed to generate title for session {request.session_id}: {str(e)}")
+                logger.warning(
+                    f"Failed to generate title for session {request.session_id}: {str(e)}"
+                )
 
             return chat_entry
 
@@ -234,7 +238,9 @@ async def insurance_chatbot(request: InsurancePromptRequest):
                 await session_service.generate_and_set_title(request.session_id)
         except Exception as e:
             # Don't fail the request if title generation fails
-            logger.warning(f"Failed to generate title for session {request.session_id}: {str(e)}")
+            logger.warning(
+                f"Failed to generate title for session {request.session_id}: {str(e)}"
+            )
 
         logger.info(
             f"Successfully processed insurance chatbot request for mobile: {mobile_number[-4:]}****"

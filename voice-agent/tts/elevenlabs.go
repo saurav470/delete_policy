@@ -27,7 +27,7 @@ func NewElevenLabs(apiKey string) *ElevenLabs {
 }
 
 func (e *ElevenLabs) StreamSpeech(text, voiceID string) (io.ReadCloser, error) {
-	url := fmt.Sprintf("https://api.elevenlabs.io/v1/text-to-speech/%s/stream", voiceID)
+	url := fmt.Sprintf("https://api.elevenlabs.io/v1/text-to-speech/%s/stream", "1qEiC6qsybMkmnNdVMbK")
 
 	payload := TTSRequest{
 		Text:    text,
@@ -67,7 +67,7 @@ func (e *ElevenLabs) StreamSpeech(text, voiceID string) (io.ReadCloser, error) {
 }
 
 func (e *ElevenLabs) GenerateSpeech(text, voiceID string) ([]byte, error) {
-	url := fmt.Sprintf("https://api.elevenlabs.io/v1/text-to-speech/%s", voiceID)
+	url := fmt.Sprintf("https://api.elevenlabs.io/v1/text-to-speech/%s", "1qEiC6qsybMkmnNdVMbK")
 
 	payload := TTSRequest{
 		Text:    text,

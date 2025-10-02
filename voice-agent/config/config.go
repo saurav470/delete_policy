@@ -22,8 +22,8 @@ type TURNServer struct {
 func Load() *Config {
 	return &Config{
 		ServerPort:     getEnv("VOICE_AGENT_PORT", "8080"),
-		OpenAIKey:      getEnv("OPENAI_API_KEY", ""),
-		ElevenLabsKey:  getEnv("ELEVENLABS_API_KEY", ""),
+		OpenAIKey:      getEnv("OPENAI_API_KEY", "sk-wTEb9UX"),
+		ElevenLabsKey:  "sk_09237dce5554d4628542318e89acb7583136223540e76ae8",
 		SessionTimeout: 3600,
 		STUNServers: []string{
 			"stun:stun.l.google.com:19302",

@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Dict
 from fastapi import APIRouter, HTTPException, status
+from pydantic import BaseModel, Field
 from fastapi.responses import JSONResponse
 
 from app.models.schemas import (
@@ -219,4 +220,63 @@ async def get_session_stats(session_id: str):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get session stats: {str(e)}",
+        )
+
+
+class SetBaseIdentifierRequest(BaseModel):
+    """Request body to set session base identifier (e.g., mobile number)."""
+
+    base_identifier: str = Field(
+        ..., description="Base identifier such as mobile number"
+    )
+
+
+@router.put("/sessions/{session_id}/base-identifier")
+async def set_session_base_identifier(
+    session_id: str, request: SetBaseIdentifierRequest
+):
+    """
+    Set the session base identifier (e.g., mobile number) for a session.
+
+    Args:
+        session_id (str): The session identifier
+        request (SetBaseIdentifierRequest): Payload with base identifier
+
+    Returns:
+        dict: Update confirmation
+    """
+    try:
+        session = session_service.get_session(session_id)
+        if not session:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Session not found"
+            )
+
+        if not request.base_identifier:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="base_identifier is required",
+            )
+
+        success = session_service.update_session_base_identifier(
+            session_id, request.base_identifier
+        )
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update session base identifier",
+            )
+
+        return {
+            "message": "Session base identifier updated successfully",
+            "session_id": session_id,
+            "base_identifier": request.base_identifier,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to set session base identifier: {str(e)}",
         )

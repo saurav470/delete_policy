@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { createSession, sendMessage, setSessionBaseIdentifier } from '../utils/api';
 import { Mic, MicOff, Phone, PhoneOff, Loader2, Volume2 } from 'lucide-react';
 import './VoiceAgent.css';
 
@@ -11,6 +12,12 @@ function VoiceAgent() {
   const [error, setError] = useState('');
   const audioRef = useRef(null);
   const peerConnectionRef = useRef(null);
+  const localStreamRef = useRef(null);
+  const sessionRef = useRef({ room_id: null, session_id: null });
+  const negotiatedRef = useRef(false);
+  const pendingIceRef = useRef([]);
+  const recognitionRef = useRef(null);
+  const backendSessionRef = useRef(null);
 
   const startCall = async () => {
     if (!phoneNumber.trim()) {
@@ -37,8 +44,120 @@ function VoiceAgent() {
       }
 
       const data = await response.json();
-      
-      setTranscript([
+      sessionRef.current = { room_id: data.room_id, session_id: data.session_id };
+
+      // Create a backend chat session for Python API
+      try {
+        const sessionResp = await createSession();
+        backendSessionRef.current = sessionResp.session_id;
+        // Set the mobile number as the session base identifier so user need not speak it
+        if (phoneNumber && backendSessionRef.current) {
+          try {
+            await setSessionBaseIdentifier(backendSessionRef.current, phoneNumber);
+          } catch (_) { /* ignore */ }
+        }
+      } catch (e) {
+        // Non-fatal; chat will fail without this
+      }
+
+      // 1) Get microphone
+      const localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      localStreamRef.current = localStream;
+
+      // 2) Create RTCPeerConnection
+      const pc = new RTCPeerConnection({
+        iceServers: [
+          { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+          { urls: ['turn:openrelay.metered.ca:80'], username: 'openrelayproject', credential: 'openrelayproject' }
+        ]
+      });
+      peerConnectionRef.current = pc;
+
+      // 3) Add local audio track
+      localStream.getAudioTracks().forEach((track) => pc.addTrack(track, localStream));
+
+      // 4) Play remote audio when received
+      pc.ontrack = (event) => {
+        const [remoteStream] = event.streams;
+        if (audioRef.current) {
+          audioRef.current.srcObject = remoteStream;
+          audioRef.current.play().catch(() => { });
+        }
+      };
+
+      // 5) Send local ICE candidates to server
+      pc.onicecandidate = async (e) => {
+        if (!e.candidate) return;
+        const candidate = e.candidate.toJSON();
+        if (!negotiatedRef.current) {
+          pendingIceRef.current.push(candidate);
+          return;
+        }
+        try {
+          await fetch('/voice/ice-candidate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              session_id: sessionRef.current.session_id,
+              room_id: sessionRef.current.room_id,
+              candidate,
+            }),
+          });
+        } catch (err) {
+          // Best-effort; ignore
+        }
+      };
+
+      pc.oniceconnectionstatechange = () => {
+        const state = pc.iceConnectionState;
+        if (state === 'failed' || state === 'disconnected' || state === 'closed') {
+          setIsConnected(false);
+        }
+      };
+
+      // 6) Create offer and send to server
+      const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false });
+      await pc.setLocalDescription(offer);
+
+      const answerResp = await fetch('/voice/offer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: sessionRef.current.session_id,
+          room_id: sessionRef.current.room_id,
+          offer: pc.localDescription,
+        }),
+      });
+
+      if (!answerResp.ok) {
+        throw new Error('Failed to negotiate WebRTC');
+      }
+
+      const answerData = await answerResp.json();
+      await pc.setRemoteDescription(answerData.answer);
+      negotiatedRef.current = true;
+      // Start browser-based STT (Web Speech API)
+      startBrowserSTT();
+      // Flush any buffered ICE candidates now that remote description is set on server
+      if (pendingIceRef.current.length > 0) {
+        const toSend = [...pendingIceRef.current];
+        pendingIceRef.current = [];
+        for (const candidate of toSend) {
+          try {
+            await fetch('/voice/ice-candidate', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                session_id: sessionRef.current.session_id,
+                room_id: sessionRef.current.room_id,
+                candidate,
+              }),
+            });
+          } catch (_) { }
+        }
+      }
+
+      const baseTranscript = [
         {
           speaker: 'system',
           text: `Voice session started. Session ID: ${data.session_id}`,
@@ -49,7 +168,17 @@ function VoiceAgent() {
           text: 'Hello! I\'m your insurance assistant. How can I help you today?',
           timestamp: new Date().toISOString(),
         },
-      ]);
+      ];
+
+      if (backendSessionRef.current) {
+        baseTranscript.unshift({
+          speaker: 'system',
+          text: `Backend chat session: ${backendSessionRef.current}`,
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      setTranscript(baseTranscript);
 
       setIsConnected(true);
       setIsConnecting(false);
@@ -65,6 +194,14 @@ function VoiceAgent() {
       peerConnectionRef.current.close();
       peerConnectionRef.current = null;
     }
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((t) => t.stop());
+      localStreamRef.current = null;
+    }
+    if (audioRef.current) {
+      audioRef.current.srcObject = null;
+    }
+    stopBrowserSTT();
 
     setIsConnected(false);
     setTranscript([]);
@@ -80,6 +217,160 @@ function VoiceAgent() {
         audioTrack.enabled = isMuted;
       }
     }
+  };
+
+  const startBrowserSTT = () => {
+    try {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        return;
+      }
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'en-US';
+      recognition.continuous = true;
+      recognition.interimResults = true;
+
+      let interim = '';
+      recognition.onresult = async (event) => {
+        let finalTranscript = '';
+        interim = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const chunk = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalTranscript += chunk;
+          } else {
+            interim += chunk;
+          }
+        }
+
+        if (finalTranscript.trim()) {
+          // Append user text
+          const userEntry = {
+            speaker: 'user',
+            text: finalTranscript.trim(),
+            timestamp: new Date().toISOString(),
+          };
+          setTranscript((prev) => [...prev, userEntry]);
+
+          // Send to backend chat if session available
+          if (backendSessionRef.current) {
+            try {
+              // Prefer streaming voice endpoint for low latency
+              const ctrl = new AbortController();
+              const resp = await fetch('/api/v1/insurance/chat/voice-stream', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ session_id: backendSessionRef.current, prompt: finalTranscript.trim() }),
+                signal: ctrl.signal,
+              });
+
+              if (resp.ok && resp.body) {
+                const reader = resp.body.getReader();
+                const decoder = new TextDecoder();
+                let aggregated = '';
+                let firstSentenceSpoken = false;
+                while (true) {
+                  const { value, done } = await reader.read();
+                  if (done) break;
+                  const chunk = decoder.decode(value, { stream: true });
+                  if (!chunk) continue;
+                  aggregated += chunk;
+
+                  // Speak early when we have a sentence end
+                  if (!firstSentenceSpoken) {
+                    const sentences = aggregated.split(/(?<=[.!?])\s+/);
+                    if (sentences.length > 0 && /[.!?]$/.test(sentences[0])) {
+                      const early = formatForVoice(sentences[0]);
+                      if (window.speechSynthesis && early) {
+                        try { window.speechSynthesis.speak(new SpeechSynthesisUtterance(early)); } catch (_) { }
+                      }
+                      firstSentenceSpoken = true;
+                    }
+                  }
+                }
+
+                const finalAnswer = formatForVoice(aggregated);
+                const agentEntry = { speaker: 'agent', text: finalAnswer, timestamp: new Date().toISOString() };
+                setTranscript((prev) => [...prev, agentEntry]);
+              } else {
+                // Fallback to non-streaming chat
+                const chatResp = await sendMessage(backendSessionRef.current, finalTranscript.trim());
+                const answerRaw = chatResp.answer || '';
+                const answer = formatForVoice(answerRaw);
+                const agentEntry = { speaker: 'agent', text: answer, timestamp: new Date().toISOString() };
+                setTranscript((prev) => [...prev, agentEntry]);
+                if (window.speechSynthesis && answer) {
+                  const utter = new SpeechSynthesisUtterance(answer);
+                  utter.rate = 1.0;
+                  utter.pitch = 1.0;
+                  window.speechSynthesis.speak(utter);
+                }
+              }
+              const agentEntry = {
+                speaker: 'agent',
+                text: answer,
+                timestamp: new Date().toISOString(),
+              };
+              setTranscript((prev) => [...prev, agentEntry]);
+
+              // Optional TTS of the assistant reply
+              // TTS handled above for streaming; no-op here
+            } catch (e) {
+              // ignore chat failures, keep STT running
+            }
+          }
+        }
+      };
+
+      recognition.onerror = () => { };
+      recognition.onend = () => {
+        // Auto-restart while connected
+        if (isConnected) {
+          try { recognition.start(); } catch (_) { }
+        }
+      };
+
+      recognitionRef.current = recognition;
+      try { recognition.start(); } catch (_) { }
+    } catch (_) {
+      // ignore
+    }
+  };
+
+  const stopBrowserSTT = () => {
+    const rec = recognitionRef.current;
+    if (rec) {
+      try { rec.onend = null; rec.stop(); } catch (_) { }
+    }
+    recognitionRef.current = null;
+  };
+
+  // Voice formatting helpers: strip HTML and shorten for crisper TTS
+  const stripHtml = (html) => {
+    try {
+      const div = document.createElement('div');
+      div.innerHTML = html;
+      const text = div.textContent || div.innerText || '';
+      return text.replace(/\s+/g, ' ').trim();
+    } catch (_) {
+      return html;
+    }
+  };
+
+  const shortenForVoice = (text, maxSentences = 2, maxChars = 280) => {
+    if (!text) return text;
+    let trimmed = text.trim();
+    const sentences = trimmed.split(/(?<=[.!?])\s+/);
+    trimmed = sentences.slice(0, maxSentences).join(' ');
+    if (trimmed.length > maxChars) {
+      trimmed = trimmed.slice(0, maxChars).replace(/\s+\S*$/, '').trim() + '...';
+    }
+    return trimmed;
+  };
+
+  const formatForVoice = (maybeHtml) => {
+    const plain = stripHtml(maybeHtml);
+    return shortenForVoice(plain);
   };
 
   return (
@@ -159,8 +450,8 @@ function VoiceAgent() {
                 {transcript.map((entry, index) => (
                   <div key={index} className={`transcript-entry ${entry.speaker}`}>
                     <span className="speaker-tag">
-                      {entry.speaker === 'agent' ? '🤖 Assistant' : 
-                       entry.speaker === 'user' ? '👤 You' : 'ℹ️ System'}
+                      {entry.speaker === 'agent' ? '🤖 Assistant' :
+                        entry.speaker === 'user' ? '👤 You' : 'ℹ️ System'}
                     </span>
                     <p>{entry.text}</p>
                   </div>
@@ -187,6 +478,9 @@ function VoiceAgent() {
                 <span>End Call</span>
               </button>
             </div>
+
+            {/* Hidden audio element to play remote media */}
+            <audio ref={audioRef} autoPlay playsInline />
           </div>
         )}
       </div>

@@ -1,20 +1,23 @@
 package main
 
 import (
-        "encoding/json"
-        "fmt"
-        "log"
-        "net/http"
-        "voice-agent/config"
-        "voice-agent/models"
-        "voice-agent/room"
-        "voice-agent/sfu"
-        "voice-agent/signaling"
-        "voice-agent/stt"
-        "voice-agent/tts"
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"sync"
+	"voice-agent/config"
+	"voice-agent/models"
+	"voice-agent/room"
+	"voice-agent/sfu"
+	"voice-agent/signaling"
+	"voice-agent/stt"
+	"voice-agent/tts"
 
-        "github.com/google/uuid"
-        "github.com/pion/webrtc/v4"
+	"github.com/google/uuid"
+	"github.com/pion/webrtc/v4"
 )
 
 type Server struct {
@@ -24,6 +27,8 @@ type Server struct {
         signalingServer *signaling.SignalingServer
         ttsClient       *tts.ElevenLabs
         sttClient       *stt.OpenAISTT
+        sttBuffersMu    sync.Mutex
+        sttBuffers      map[string]*bytes.Buffer // key: sessionID
 }
 
 func main() {
@@ -36,6 +41,7 @@ func main() {
                 signalingServer: signaling.NewSignalingServer(),
                 ttsClient:       tts.NewElevenLabs(cfg.ElevenLabsKey),
                 sttClient:       stt.NewOpenAISTT(cfg.OpenAIKey),
+                sttBuffers:      make(map[string]*bytes.Buffer),
         }
 
         http.HandleFunc("/api/voice/start", server.handleStartVoiceSession)
@@ -43,6 +49,7 @@ func main() {
         http.HandleFunc("/api/voice/offer", server.handleOffer)
         http.HandleFunc("/api/voice/answer", server.handleAnswer)
         http.HandleFunc("/api/voice/ice-candidate", server.handleICECandidate)
+        http.HandleFunc("/api/voice/stt", server.handleSTT)
         http.HandleFunc("/health", server.handleHealth)
 
         addr := fmt.Sprintf(":%s", cfg.ServerPort)
@@ -112,6 +119,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleOffer(w http.ResponseWriter, r *http.Request) {
+        log.Printf("/offer called")
         var msg struct {
                 SessionID string                     `json:"session_id"`
                 RoomID    string                     `json:"room_id"`
@@ -142,11 +150,13 @@ func (s *Server) handleOffer(w http.ResponseWriter, r *http.Request) {
                 return
         }
 
+        log.Printf("Creating answer for session %s in room %s", msg.SessionID, msg.RoomID)
         answer, err := s.sfuServer.CreateAnswer(participant.PeerConnection, *msg.Offer)
         if err != nil {
                 http.Error(w, fmt.Sprintf("Failed to create answer: %v", err), http.StatusInternalServerError)
                 return
         }
+        log.Printf("Answer created for session %s", msg.SessionID)
 
         w.Header().Set("Content-Type", "application/json")
         json.NewEncoder(w).Encode(map[string]interface{}{
@@ -195,6 +205,7 @@ func (s *Server) handleAnswer(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleICECandidate(w http.ResponseWriter, r *http.Request) {
+        log.Printf("/ice-candidate called")
         var msg struct {
                 SessionID string                   `json:"session_id"`
                 RoomID    string                   `json:"room_id"`
@@ -229,9 +240,76 @@ func (s *Server) handleICECandidate(w http.ResponseWriter, r *http.Request) {
                 http.Error(w, fmt.Sprintf("Failed to add ICE candidate: %v", err), http.StatusInternalServerError)
                 return
         }
+        log.Printf("ICE candidate added for session %s", msg.SessionID)
 
         w.WriteHeader(http.StatusOK)
         json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleSTT(w http.ResponseWriter, r *http.Request) {
+        if r.Method != http.MethodPost {
+                http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+                return
+        }
+
+        sessionID := r.Header.Get("X-Session-ID")
+        roomID := r.Header.Get("X-Room-ID")
+
+        audioData, err := io.ReadAll(r.Body)
+        if err != nil || len(audioData) == 0 {
+                http.Error(w, "No audio data", http.StatusBadRequest)
+                return
+        }
+
+        if s.config.OpenAIKey == "" {
+                log.Printf("STT[%s/%s]: missing OPENAI_API_KEY; received %d bytes", roomID, sessionID, len(audioData))
+                http.Error(w, "STT not configured: missing OPENAI_API_KEY", http.StatusInternalServerError)
+                return
+        }
+
+        log.Printf("STT[%s/%s]: received %d bytes", roomID, sessionID, len(audioData))
+
+        // Buffer chunks per session to form a valid file before sending to OpenAI
+        s.sttBuffersMu.Lock()
+        buf, ok := s.sttBuffers[sessionID]
+        if !ok {
+                buf = &bytes.Buffer{}
+                s.sttBuffers[sessionID] = buf
+        }
+        buf.Write(audioData)
+        currentSize := buf.Len()
+        s.sttBuffersMu.Unlock()
+
+        // Only transcribe when enough audio accumulated (e.g., > 60KB)
+        if currentSize < 60000 {
+                w.WriteHeader(http.StatusNoContent)
+                return
+        }
+
+        // Snapshot and reset buffer for next batch
+        s.sttBuffersMu.Lock()
+        audioToSend := make([]byte, buf.Len())
+        copy(audioToSend, buf.Bytes())
+        buf.Reset()
+        s.sttBuffersMu.Unlock()
+
+        text, err := s.sttClient.TranscribeAudio(audioToSend, "en")
+        if err != nil {
+                log.Printf("STT error: %v", err)
+                http.Error(w, "STT failed", http.StatusInternalServerError)
+                return
+        }
+
+        if text == "" {
+                w.Header().Set("Content-Type", "application/json")
+                json.NewEncoder(w).Encode(map[string]string{"text": ""})
+                return
+        }
+
+        log.Printf("STT[%s/%s]: %s", roomID, sessionID, text)
+
+        w.Header().Set("Content-Type", "application/json")
+        json.NewEncoder(w).Encode(map[string]string{"text": text})
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -268,7 +346,7 @@ func (s *Server) runVoiceAgent(room *models.Room, agent *models.Participant, use
                 agent.DataChannel.SendText(string(data))
         }
 
-        audioStream, err := s.ttsClient.StreamSpeech(greetingText, "21m00Tcm4TlvDq8ikWAM")
+        audioStream, err := s.ttsClient.StreamSpeech(greetingText, "1qEiC6qsybMkmnNdVMbK")
         if err != nil {
                 log.Printf("TTS error: %v", err)
                 return
